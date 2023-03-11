@@ -36,6 +36,14 @@ def is_point_inside_polygon(point, polygon):
 
     return inside
 
+def is_point_inside_polygons(point, polygons):
+    r = False
+
+    for polygon in polygons:
+        if is_point_inside_polygon(point, polygon.get_position()):
+            return True
+
+    return False
 
 def get_direction_vector(theta):
     v = np.array([cos(theta), sin(theta)])
@@ -118,11 +126,45 @@ class Game:
                 if lines[i][j] == 'X':
                     self.walls.append(Wall(i, j, i + 1, j + 1))
 
-    def get_polygonal_items(self):
+    def get_polygonal_items(self, ignore=None):
         s = []
         s.extend(self.characters)
         s.extend(self.walls)
+        if ignore in s:
+            s.remove(ignore)
         return s
+
+    def get_eight_points(self):
+        character = self.characters[0]
+        step = 0.1
+
+        points = []
+
+        for i in range(8):
+            # Send out ray
+            ray_direction = character.direction + i * pi / 4
+            ray_vector = get_direction_vector(ray_direction)
+
+            current_point = character.get_position()[0] + step * ray_vector
+
+            attempts = 0
+
+            while not is_point_inside_polygons(current_point, self.get_polygonal_items(character)):
+                # print(current_point)
+
+                attempts += 1
+                if attempts > 10:
+                    break
+
+                if current_point[0] != max(0, min(16, current_point[0])) or \
+                    current_point[1] != max(0, min(16, current_point[1])):
+                    break
+
+                current_point += step * ray_vector
+
+            points.append(current_point)
+
+        return points
 
     def step(self):
         for character in self.characters:
