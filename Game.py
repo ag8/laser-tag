@@ -1,8 +1,12 @@
+import math
 import random
 from abc import abstractmethod
-from math import sin, cos, pi
+from math import sin, cos, pi, inf
 
 import numpy as np
+
+CHARACTER = 0o0
+WALL = 0o1
 
 
 def is_point_inside_polygon(point, polygon):
@@ -36,18 +40,61 @@ def is_point_inside_polygon(point, polygon):
 
     return inside
 
+
 def is_point_inside_polygons(point, polygons):
     r = False
 
     for polygon in polygons:
-        if is_point_inside_polygon(point, polygon.get_position()):
+        if is_point_inside_polygon(point, polygon.get_vertices()):
             return True
 
     return False
 
+
 def get_direction_vector(theta):
     v = np.array([cos(theta), sin(theta)])
     return v / np.linalg.norm(v)
+
+
+def closest_point(vertices, x0, y0):
+    closest_points = []
+    for i in range(len(vertices)):
+        # Find the closest point on edge i to the given point
+        x1, y1 = vertices[i]
+        x2, y2 = vertices[(i + 1) % len(vertices)]
+        dx = x2 - x1
+        dy = y2 - y1
+        t = ((x0 - x1) * dx + (y0 - y1) * dy) / (dx ** 2 + dy ** 2)
+        if t <= 0:
+            closest_points.append((x1, y1))
+        elif t >= 1:
+            closest_points.append((x2, y2))
+        else:
+            closest_points.append((x1 + t * dx, y1 + t * dy))
+
+    # Calculate the distance between each closest point and the given point
+    distances = [math.sqrt((x - x0) ** 2 + (y - y0) ** 2) for x, y in closest_points]
+
+    # Choose the closest point
+    closest_index = distances.index(min(distances))
+    closest_x, closest_y = closest_points[closest_index]
+    return np.array([closest_x, closest_y])
+
+
+def filter_top(l, n):
+    # Sort by distance
+    sorted_list = sorted(l, key=lambda x: x[1])
+
+    # Return closest ten
+    return sorted_list[:n]
+
+
+def dist(p1, p2):
+    return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+
+
+def get_angle(v0, v1):
+    return np.math.atan2(np.linalg.det([v0, v1]), np.dot(v0, v1))
 
 
 class GameObject:
@@ -55,7 +102,11 @@ class GameObject:
         pass
 
     @abstractmethod
-    def get_position(self):
+    def get_vertices(self):
+        pass
+
+    @abstractmethod
+    def get_closest_point_to(self, point):
         pass
 
 
@@ -72,10 +123,12 @@ class Character(GameObject):
 
         self.ammo = 1000
 
+        self.type = CHARACTER
+
     def dir_v(self):
         return get_direction_vector(self.direction)
 
-    def get_position(self):
+    def get_vertices(self):
         # First coordinate is (x, y)
         first_coord = np.array(self.coords, dtype=np.float64)
 
@@ -92,6 +145,12 @@ class Character(GameObject):
 
         return first_coord, second_coord, third_coord, fourth_coord
 
+    def get_pos(self):
+        return np.array(self.coords)
+
+    def get_closest_point_to(self, point):
+        return closest_point(self.get_vertices(), point[0], point[1])
+
 
 class Wall(GameObject):
     def __init__(self, x1, y1, x2, y2):
@@ -101,13 +160,18 @@ class Wall(GameObject):
         self.x2 = x2
         self.y2 = y2
 
-    def get_position(self):
+        self.type = WALL
+
+    def get_vertices(self):
         return (self.x1, self.y1), (self.x2, self.y1), (self.x2, self.y2), (self.x1, self.y2)
+
+    def get_closest_point_to(self, point):
+        return closest_point(self.get_vertices(), point[0], point[1])
 
 
 class Game:
     num_teams = 4
-    characters_per_team = 4
+    characters_per_team = 2
 
     def __init__(self):
         # Create characters
@@ -115,7 +179,7 @@ class Game:
 
         for i in range(Game.num_teams):
             for j in range(Game.characters_per_team):
-                self.characters.append(Character(random.random() * 16, random.random() * 16, i))
+                self.characters.append(Character(random.random() * 17, random.random() * 17, i))
 
         with open('layout.txt') as file:
             lines = [line.rstrip() for line in file]
@@ -134,49 +198,81 @@ class Game:
             s.remove(ignore)
         return s
 
-    def get_eight_points(self):
+    def get_closest_objects(self):
         character = self.characters[0]
-        step = 0.1
 
-        points = []
+        closest_distance = inf
+        loc = character.get_vertices()[0]
 
-        for i in range(8):
-            # Send out ray
-            ray_direction = character.direction + i * pi / 4
-            ray_vector = get_direction_vector(ray_direction)
+        for other_character in self.characters:
+            if other_character == character:
+                continue
 
-            current_point = character.get_position()[0] + step * ray_vector
+            oloc = other_character.get_vertices()[0]
 
-            attempts = 0
+            dist = math.sqrt((loc[0] - oloc[0]) ** 2 + (loc[1] - oloc[1]) ** 2)
 
-            while not is_point_inside_polygons(current_point, self.get_polygonal_items(character)):
-                # print(current_point)
+            if dist < closest_distance:
+                closest_distance = dist
 
-                attempts += 1
-                if attempts > 10:
-                    break
+        return closest_distance
 
-                if current_point[0] != max(0, min(16, current_point[0])) or \
-                    current_point[1] != max(0, min(16, current_point[1])):
-                    break
+    def get_observation(self, character):
+        # Get distances to all objects
+        object_distances = []
 
-                current_point += step * ray_vector
+        for object in self.get_polygonal_items():
+            closest = object.get_closest_point_to(character.get_pos())
+            distance = dist(closest, character.get_pos())
+            vector_to_closest = closest - character.get_pos()
+            vector_pointing = character.get_vertices()[2] - character.get_vertices()[0]
+            angle = get_angle(vector_pointing, vector_to_closest)
 
-            points.append(current_point)
+            object_distances.append([object.type, distance, angle])
 
-        return points
+        object_distances = filter_top(object_distances, 10)
+        return object_distances
 
-    def step(self):
+    def get_observations(self):
+        observations = []
+
         for character in self.characters:
+            observations.append(self.get_observation(character))
+
+        # print(observations)
+        return observations
+
+    def step(self, actions):
+        rewards = np.zeros(len(self.characters), dtype=int)
+
+        for idx, character in enumerate(self.characters):
+            if actions[idx] == 0:  # do nothing
+                pass
+            elif actions[idx] == 1:  # accelerate
+                character.velocity += 0.001
+            elif actions[idx] == 2:  # slow down
+                if character.velocity > 0:
+                    character.velocity -= 0.001
+            elif actions[idx] == 3:  # rotate right
+                character.direction += pi / 100
+            elif actions[idx] == 4:  # rotate left
+                character.direction -= pi / 100
+            elif actions[idx] == 5:  # shoot
+                pass
+
+            # Move characters
             character.coords += character.dir_v() * character.velocity
-            character.direction += pi / 1000
+            cnc = character.get_vertices()[2]
 
             # Detect intersections
             intersection = False
 
             # Boundaries
-            if character.coords[0] != max(0, min(16, character.coords[0])) or \
-                    character.coords[1] != max(0, min(16, character.coords[1])):
+            if character.coords[0] != max(0, min(17, character.coords[0])) or \
+                    character.coords[1] != max(0, min(17, character.coords[1])):
+                intersection = True
+
+            if cnc[0] != max(0, min(17, cnc[0])) or cnc[1] != max(0, min(17, cnc[1])):
                 intersection = True
 
             # Other characters
@@ -184,8 +280,11 @@ class Game:
                 if other_object == character:
                     continue
 
-                if is_point_inside_polygon(character.get_position()[2], list(other_object.get_position())):
+                if is_point_inside_polygon(character.get_vertices()[2], list(other_object.get_vertices())):
                     intersection = True
 
             if intersection:
                 character.direction = character.direction + pi
+                rewards[idx] -= 10  # crashing into things is bad
+
+        return self.get_observations(), rewards

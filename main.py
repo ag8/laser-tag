@@ -1,5 +1,8 @@
+import math
+import random
 import sys
 
+import numpy as np
 import pygame
 import tqdm as tqdm
 from pygame import gfxdraw
@@ -18,14 +21,14 @@ screen.unlock()
 
 team_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
 
-for i in tqdm.tqdm(range(100000)):
+for i in tqdm.tqdm(range(100000000)):
     for event in pygame.event.get():
         if event.type == pygame.QUIT: sys.exit()
 
     screen.fill(black)
 
     for object in game.get_polygonal_items():
-        vertices = object.get_position()
+        vertices = object.get_vertices()
 
         scaled_vertices = s(vertices, scale)
 
@@ -35,17 +38,38 @@ for i in tqdm.tqdm(range(100000)):
             pygame.gfxdraw.filled_polygon(screen, scaled_vertices, (200, 200, 200))
 
 
-    for point in game.get_eight_points():
-        pygame.gfxdraw.filled_circle(screen, int(point[0] * scale), int(point[1] * scale), 10, (200, 0, 0))
-
 
     character1 = game.get_polygonal_items()[0]
-    sv = s(character1.get_position(), scale)
-    char1sub = screen.subsurface(max(sv[0][0] - 100, 0), max(sv[0][1] - 100, 0), 200, 200)
-    nice = pygame.surfarray.array3d(char1sub)
-    import matplotlib.image
+    sv = s(character1.get_vertices(), scale)
+    # char1sub = screen.subsurface(max(sv[0][0] - 100, 0), max(sv[0][1] - 100, 0), 200, 200)
+    # nice = pygame.surfarray.array3d(char1sub)
+    # import matplotlib.image
 
-    matplotlib.image.imsave('name.png', nice)
+    # matplotlib.image.imsave('name.png', nice)
 
-    game.step()
+
+    # rad = game.get_closest_objects()
+    # pygame.gfxdraw.aacircle(screen, int(sv[0][0]), int(sv[0][1]), int(rad * scale), (200, 0, 0))
+
+    # obs1 = game.get_observations()[0]
+    # for obs in obs1:
+    #     race, dist, angle = obs
+    #
+    #     v = sv[2] - sv[0]
+    #
+    #     u = np.matmul(np.array([[math.cos(angle), -math.sin(angle)],[math.sin(angle),math.cos(angle)]]), np.transpose(v))
+    #     u = u / np.linalg.norm(u)
+    #
+    #     point = sv[0] + scale * dist * u
+    #
+    #     # print(point)
+    #     pygame.gfxdraw.line(screen, int(sv[0][0]), int(sv[0][1]), int(point[0]), int(point[1]), (255, 255, 255) if race == 1 else (200, 0, 0))
+    #
+    #     # pygame.gfxdraw.aacircle(screen, int(point[0]), int(point[1]), int(50 * scale), (200, 0, 0))
+
+
+
+    # print(obs1)
+
+    game.step([random.randint(0, 5) for i in range(16)])
     pygame.display.flip()
