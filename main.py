@@ -7,7 +7,11 @@ import pygame
 import tqdm as tqdm
 from pygame import gfxdraw
 
+import alg1
 from Game import Game, Character
+from alg2 import Algorithm2
+from alg3 import Algorithm3
+from alg4 import Algorithm4
 from utils import s
 
 pygame.init()
@@ -20,6 +24,9 @@ screen = pygame.display.set_mode((scale * 17, scale * 17))
 screen.unlock()
 
 team_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
+algorithms = [alg1.Algorithm1(), Algorithm2(), Algorithm3(), Algorithm4()]
+
+observations, rewards = game.reset()
 
 for i in tqdm.tqdm(range(100000000)):
     for event in pygame.event.get():
@@ -33,7 +40,7 @@ for i in tqdm.tqdm(range(100000000)):
         scaled_vertices = s(vertices, scale)
 
         if type(object) is Character:
-            pygame.gfxdraw.filled_polygon(screen, scaled_vertices, team_colors[object.team])
+            pygame.gfxdraw.filled_polygon(screen, scaled_vertices, team_colors[object.team] if not object.intersecting else (255, 255, 255))
         else:
             pygame.gfxdraw.filled_polygon(screen, scaled_vertices, (200, 200, 200))
 
@@ -71,5 +78,9 @@ for i in tqdm.tqdm(range(100000000)):
 
     # print(obs1)
 
-    game.step([random.randint(0, 5) for i in range(16)])
+    actions = []
+    for idx, character in enumerate(game.characters):
+        actions.append(algorithms[character.team].get_action(observation=observations[idx], reward=rewards[idx]))
+
+    observations, rewards = game.step([random.randint(0, 5) for i in range(8)])
     pygame.display.flip()

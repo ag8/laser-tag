@@ -125,6 +125,8 @@ class Character(GameObject):
 
         self.type = CHARACTER
 
+        self.intersecting = False
+
     def dir_v(self):
         return get_direction_vector(self.direction)
 
@@ -242,8 +244,11 @@ class Game:
         # print(observations)
         return observations
 
+    def reset(self):
+        return self.step([0] * 8)
+
     def step(self, actions):
-        rewards = np.zeros(len(self.characters), dtype=int)
+        rewards = np.zeros(len(self.characters), dtype=float)
 
         for idx, character in enumerate(self.characters):
             if actions[idx] == 0:  # do nothing
@@ -284,7 +289,14 @@ class Game:
                     intersection = True
 
             if intersection:
+                character.intersecting = True
                 character.direction = character.direction + pi
-                rewards[idx] -= 10  # crashing into things is bad
+                rewards[idx] -= 15  # crashing into things is bad
+            else:
+                character.intersecting = False
 
+            # Otherwise, the reward is the negative distance from the center
+            rewards[idx] -= dist(character.coords, [8, 8]) / 100
+
+        # print(rewards)
         return self.get_observations(), rewards
